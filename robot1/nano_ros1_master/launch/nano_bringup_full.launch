@@ -1,0 +1,63 @@
+<launch>
+  <!-- FULL Jetson Nano bringup: Motor driver + Sensors + XML-RPC server -->
+  <!-- This launch file starts EVERYTHING needed for the robot to move -->
+  <!-- Uses Python motor driver (more reliable than C++ jetbot_pro) -->
+  <!-- REAL SENSORS ONLY - No dummy nodes -->
+
+  <!-- Real LiDAR: try 256000 first; use 115200 if timeout (A1/A2M8). Power: many need external 5V. -->
+  <arg name="lidar_serial_port" default="/dev/ttyUSB0" />
+  <arg name="lidar_serial_baudrate" default="256000" />
+
+  <!-- ========== JETBOT PRO MOTOR DRIVER (Python) ========== -->
+  <node pkg="jetbot_nano_bringup"
+        type="jetbot_motor_driver.py"
+        name="jetbot_motor_driver"
+        output="screen"
+        respawn="true">
+    <param name="port_name" value="/dev/ttyACM0"/>
+    <param name="baud_rate" value="115200"/>
+    <param name="linear_correction" value="1.0"/>
+    <param name="angular_correction" value="1.0"/>
+    <param name="cmd_timeout" value="0.5"/>
+  </node>
+
+  <!-- ========== SENSOR NODES ========== -->
+  <!-- REAL NODES ONLY - No dummy nodes -->
+  
+  <!-- Real LiDAR node (RPLidar) - REQUIRED -->
+  <node pkg="rplidar_ros" type="rplidarNode" name="rplidarNode" output="screen" respawn="true">
+    <param name="serial_port" type="string" value="$(arg lidar_serial_port)"/>
+    <param name="serial_baudrate" type="int" value="$(arg lidar_serial_baudrate)"/>
+    <param name="frame_id" type="string" value="laser"/>
+    <param name="inverted" type="bool" value="false"/>
+    <param name="angle_compensate" type="bool" value="true"/>
+    <remap from="scan" to="/scan"/>
+  </node>
+
+  <!-- ========== XML-RPC SERVER (REALTIME with camera) ========== -->
+  <node pkg="jetbot_nano_bringup"
+        type="xmlrpc_server_nano_realtime.py"
+        name="nano_xmlrpc_server"
+        output="screen"
+        respawn="true"
+        respawn_delay="3">
+    <!-- Camera: /dev/video1 if USB camera appears there (else use /dev/video0) -->
+    <param name="camera_device" value="/dev/video1" />
+  </node>
+
+  <!-- Motor Service Server (backup) -->
+  <node pkg="jetbot_nano_bringup"
+        type="motor_service_server.py"
+        name="nano_motor_service_server"
+        output="screen"
+        respawn="true"
+        respawn_delay="2">
+    <param name="wheel_base" value="0.2" />
+    <param name="wheel_radius" value="0.03" />
+  </node>
+
+  <!-- TF: base_footprint to laser -->
+  <node pkg="tf" type="static_transform_publisher" name="base_to_laser" 
+        args="0.1 0 0.1 0 0 0 base_footprint laser 20"/> 
+
+</launch>

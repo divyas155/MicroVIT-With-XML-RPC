@@ -1,0 +1,10 @@
+# Controller AI Service Dependencies
+
+# Core dependencies
+paho-mqtt==1.6.1
+python-dotenv==0.20.0
+requests==2.27.1
+
+# Logging and utilities
+typing-extensions==4.7.1
+

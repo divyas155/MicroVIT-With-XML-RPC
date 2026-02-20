@@ -1,0 +1,16 @@
+[Unit]
+Description=Robot1 Nano Bringup (Motors, Sensors, XML-RPC)
+After=robot1-nano.service network.target
+Requires=robot1-nano.service
+
+[Service]
+Type=simple
+User=jetbot
+WorkingDirectory=/home/jetbot/MicroVIT/robot1/nano_ros1_master
+Environment="ROS_MASTER_URI=http://localhost:11311"
+ExecStart=/bin/bash -c 'source /opt/ros/melodic/setup.bash && source /home/jetbot/MicroVIT/robot1/nano_ros1_master/devel/setup.bash && roslaunch jetbot_nano_bringup nano_bringup_full.launch'
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,43 @@
+================================================================================
+RESTART AI SERVICE WITH FULL CONFIGURATION
+================================================================================
+
+On your Orin, run these commands:
+
+# 1. Load environment variables from .env
+cd ~/MicroVIT/robot1/orin_ros2_compute
+source venv/bin/activate
+export $(cat .env | grep -v '^#' | xargs)
+
+# 2. Verify configuration
+echo "OLLAMA_MODEL: $OLLAMA_MODEL"
+echo "USE_MICROVIT: $USE_MICROVIT"
+
+# 3. Start AI service
+cd src
+python3 robot1_ai_service_realtime.py --simulation
+
+================================================================================
+EXPECTED OUTPUT:
+================================================================================
+
+You should see:
+✅ MicroViT model loaded successfully!
+✅ XML-RPC connected to Nano
+✅ MQTT Connected successfully
+✅ Ollama connected. Available models: ['qwen2.5:0.5b']
+🚀 Using MicroViT model for fast image preprocessing
+✅ MicroViT model loaded successfully!
+🤖 Robot1 AI Service started in REALTIME MODE
+Starting continuous REALTIME detection every 30 seconds
+
+Then every 30 seconds:
+✅ Captured REAL image from Nano (640x480)
+✅ Generated AI message with MicroViT+Ollama (FULL):
+[Full natural language message describing what robot sees, 
+situation assessment, and suggested actions]
+
+Instead of just:
+Robot jetson1 at (x, y): LiDAR shows Xm to nearest obstacle.
+
+================================================================================

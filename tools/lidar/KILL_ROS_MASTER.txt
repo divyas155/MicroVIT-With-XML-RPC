@@ -1,0 +1,23 @@
+================================================================================
+COPY AND PASTE THIS INTO YOUR NANO TERMINAL
+================================================================================
+
+pkill -9 roscore rosmaster rosout rplidarNode roslaunch; sleep 1; killall -9 rosmaster 2>/dev/null; echo "✅ ROS master killed"
+
+================================================================================
+Then verify it's killed:
+
+pgrep rosmaster
+
+# Should return nothing. If it shows a PID, run:
+# killall -9 rosmaster
+
+================================================================================
+Then start fresh:
+
+roscore
+
+# Or in background:
+# roscore > /tmp/roscore.log 2>&1 &
+
+================================================================================

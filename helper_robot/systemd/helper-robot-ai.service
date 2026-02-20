@@ -1,0 +1,16 @@
+[Unit]
+Description=Helper Robot AI Service
+After=network.target
+
+[Service]
+Type=simple
+User=jetbot
+WorkingDirectory=/home/jetbot/MicroVIT/helper_robot/src
+Environment="OLLAMA_NO_GPU=1"
+ExecStartPre=/bin/bash -c 'curl -s http://localhost:11434/api/tags > /dev/null || (OLLAMA_NO_GPU=1 ollama serve & sleep 3)'
+ExecStart=/bin/bash -c 'source /home/jetbot/MicroVIT/helper_robot/venv/bin/activate && python3 helper_robot_ai_service.py'
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

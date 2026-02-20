@@ -1,0 +1,62 @@
+<launch>
+  <!-- Jetson Nano bringup: Sensor data collection and XML-RPC server -->
+  <!-- NOTE: Motor control is handled separately by jetbot_pro (roslaunch jetbot_pro jetbot.launch) -->
+  <!-- This launch file only provides sensor data (LiDAR, odometry) to Orin via XML-RPC -->
+
+  <!-- IMPORTANT: jetbot_pro must be running separately to provide /odom and motor control -->
+  <!-- Run: roslaunch jetbot_pro jetbot.launch (in a separate terminal) -->
+
+  <!-- Dummy LiDAR node (publishes /scan) -->
+  <!-- Replace with real LiDAR node if you have physical LiDAR hardware -->
+  <node pkg="jetbot_nano_bringup"
+        type="lidar_dummy_node.py"
+        name="nano_lidar_dummy"
+        output="screen">
+    <param name="rate" value="5.0" />
+    <param name="frame_id" value="laser" />
+  </node>
+
+  <!-- Dummy Odometry node: Provides coordinates for AI messages -->
+  <!-- NOTE: If jetbot_pro crashes, this provides coordinates instead -->
+  <!-- If jetbot_pro is working, it will override this with real odometry -->
+  <node pkg="jetbot_nano_bringup"
+        type="odom_dummy_node.py"
+        name="nano_odom_dummy"
+        output="screen">
+    <param name="rate" value="10.0" />
+    <param name="frame_id" value="odom" />
+    <param name="base_frame_id" value="base_link" />
+    <param name="linear_speed" value="0.0" />  <!-- Static position unless robot moves -->
+  </node>
+
+  <!-- Real LiDAR node - Replace with your actual LiDAR driver -->
+  <!-- Example for RPLidar (uncomment and configure): -->
+  <!--
+  <node pkg="rplidar_ros" type="rplidarNode" name="rplidarNode" output="screen">
+    <param name="serial_port" type="string" value="/dev/ttyUSB0"/>
+    <param name="serial_baudrate" type="int" value="256000"/>
+    <param name="frame_id" type="string" value="laser"/>
+    <param name="inverted" type="bool" value="false"/>
+    <param name="angle_compensate" type="bool" value="true"/>
+    <remap from="scan" to="/scan"/>
+  </node>
+  -->
+
+  <!-- XML-RPC Server: Provides sensor data and motor control to Orin -->
+  <!-- Subscribes to /scan and /odom topics (from real hardware above) -->
+  <node pkg="jetbot_nano_bringup"
+        type="xmlrpc_server_nano.py"
+        name="nano_xmlrpc_server"
+        output="screen" />
+
+  <!-- Motor Service Server (backup, for ROS1 service calls) -->
+  <node pkg="jetbot_nano_bringup"
+        type="motor_service_server.py"
+        name="nano_motor_service_server"
+        output="screen">
+    <param name="wheel_base" value="0.2" />
+    <param name="wheel_radius" value="0.03" />
+  </node>
+</launch>
+
+

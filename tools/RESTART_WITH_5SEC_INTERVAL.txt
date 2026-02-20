@@ -1,0 +1,28 @@
+================================================================================
+RESTART AI SERVICE WITH 5 SECOND INTERVAL
+================================================================================
+
+On your Orin, run:
+
+cd ~/MicroVIT/robot1/orin_ros2_compute
+source venv/bin/activate
+export $(cat .env | grep -v '^#' | xargs)
+cd src
+python3 robot1_ai_service_realtime.py --simulation --interval 5
+
+================================================================================
+OR update the default in the code (already done):
+================================================================================
+
+The default interval has been changed from 30 to 5 seconds.
+So you can just run:
+
+python3 robot1_ai_service_realtime.py --simulation
+
+And it will use 5 seconds by default.
+
+To use a different interval:
+python3 robot1_ai_service_realtime.py --simulation --interval 10  # 10 seconds
+python3 robot1_ai_service_realtime.py --simulation --interval 1    # 1 second
+
+================================================================================

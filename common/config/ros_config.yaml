@@ -1,0 +1,44 @@
+# ROS Configuration
+# Centralized ROS topic names and parameters
+
+ros1:
+  # ROS1 topics (Nano)
+  topics:
+    cmd_vel: "/cmd_vel"
+    scan: "/scan"
+    odom: "/odom"
+    camera: "/camera/image_raw"  # Optional ROS topic (currently using XML-RPC)
+  
+  # ROS1 parameters
+  parameters:
+    camera_device: "/dev/video0"
+    lidar_port: "/dev/ttyUSB0"
+    lidar_baudrate: 256000  # Try 115200 if 80008000/RESULT_OPERATION_TIMEOUT; many need external 5V
+    motor_port: "/dev/ttyACM0"
+    motor_baudrate: 115200
+
+ros2:
+  # ROS2 topics (Orin)
+  topics:
+    cmd_vel: "/cmd_vel"
+    scan: "/scan"
+    odom: "/odom"
+  
+  # ROS2 parameters
+  parameters:
+    use_sim_time: false
+
+bridge:
+  # ROS1-ROS2 bridge configuration
+  topics:
+    - "/cmd_vel"
+    - "/scan"
+    - "/odom"
+  
+  # Bridge type: "ros1_bridge" or "xmlrpc"
+  type: "xmlrpc"
+  
+  # XML-RPC settings (if using XML-RPC bridge)
+  xmlrpc:
+    nano_host: "10.13.68.184"
+    nano_port: 8000

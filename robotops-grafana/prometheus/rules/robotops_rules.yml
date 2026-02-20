@@ -1,0 +1,40 @@
+# RobotOps Prometheus alert rules
+groups:
+  - name: robotops
+    interval: 30s
+    rules:
+      - alert: SOURCE_DOWN
+        expr: (time() - max_over_time(robot_last_seen_seconds{source=~"robot1|controller|helper"}[1m])) > 30
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Source {{ $labels.source }} has not sent a message in 30+ seconds"
+          runbook: "Check service on that node; rostopic/rosnode; ping."
+
+      - alert: LIDAR_STALL
+        expr: avg_over_time(robot_lidar_scan_hz{source="robot1"}[10s]) < 0.1
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Robot1 LiDAR scan rate near zero (stall)"
+          runbook: "rostopic hz /scan; check rplidarNode on Nano."
+
+      - alert: CRITICAL_MSG
+        expr: increase(robot_critical_messages_total{source="robot1"}[1m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Robot1 emitted critical message(s)"
+          runbook: "Check Robot1 Deep Dive dashboard and logs."
+
+      - alert: HIGH_LATENCY
+        expr: avg_over_time(robot_network_latency_ms[30s]) > 300
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Network latency > 300 ms for {{ $labels.source }}"
+          runbook: "ping <ip>; check network."

@@ -1,0 +1,16 @@
+[Unit]
+Description=Robot1 Nano ROS1 Master Service
+After=network.target
+
+[Service]
+Type=simple
+User=jetbot
+WorkingDirectory=/home/jetbot/MicroVIT/robot1/nano_ros1_master
+Environment="ROS_MASTER_URI=http://localhost:11311"
+ExecStartPre=/bin/bash -c 'source /opt/ros/melodic/setup.bash && cd /home/jetbot/MicroVIT/robot1/nano_ros1_master && [ ! -d devel ] && catkin_make || true'
+ExecStart=/bin/bash -c 'source /opt/ros/melodic/setup.bash && source /home/jetbot/MicroVIT/robot1/nano_ros1_master/devel/setup.bash && roscore'
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

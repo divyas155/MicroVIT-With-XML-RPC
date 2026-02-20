@@ -1,0 +1,32 @@
+# Helper Robot Configuration
+
+device:
+  name: "helper_robot"
+  type: "jetson_orin"  # Or other platform
+  ros_version: "humble"
+
+ai:
+  # Text generation (Ollama)
+  ollama_host: "http://localhost:11434"
+  ollama_model: "qwen2.5:0.5b"
+  ollama_no_gpu: true
+  ollama_max_tokens: 200
+  ollama_context_length: 512
+
+flask:
+  host: "0.0.0.0"
+  port: 5000
+  debug: false
+
+mqtt:
+  # Inherits from common/config/mqtt_config.yaml
+  subscribe_topics:
+    - "helper/tasks"
+  
+  publish_topics:
+    - "helper/status"
+
+tasks:
+  # Task execution settings
+  timeout: 300  # seconds
+  retry_attempts: 3

@@ -1,0 +1,101 @@
+================================================================================
+COMPLETE LiDAR DIAGNOSIS - Run This on Nano
+================================================================================
+
+Copy and paste this entire script into your Nano SSH session:
+
+cat > ~/complete_check.sh << 'SCRIPT_END'
+#!/bin/bash
+# Complete LiDAR Diagnosis
+LIDAR_DEVICE="/dev/ttyUSB0"
+
+echo "=========================================="
+echo "COMPLETE LiDAR DIAGNOSIS"
+echo "=========================================="
+
+# 1. SDK Version Check
+echo "1. SDK VERSION CHECK"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+source /opt/ros/melodic/setup.bash 2>/dev/null || true
+pkill -9 rplidarNode 2>/dev/null || true
+if ! rostopic list > /dev/null 2>&1; then roscore > /tmp/roscore.log 2>&1 & sleep 3; fi
+timeout 3 rosrun rplidar_ros rplidarNode _serial_port:="$LIDAR_DEVICE" _serial_baudrate:=256000 2>&1 | grep -i "SDK\|version" | head -3
+pkill -9 rplidarNode 2>/dev/null || true
+echo ""
+
+# 2. Package Check
+echo "2. RPLIDAR_ROS PACKAGE"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+if rospack find rplidar_ros > /dev/null 2>&1; then
+    RPLIDAR_PATH=$(rospack find rplidar_ros)
+    echo "✅ Package found: $RPLIDAR_PATH"
+    ls -lh "$RPLIDAR_PATH/rplidarNode" 2>/dev/null || echo "⚠️  Node executable not in expected location"
+else
+    echo "❌ Package not found!"
+fi
+echo ""
+
+# 3. Comprehensive Data Test (ALL baud rates including low ones)
+echo "3. COMPREHENSIVE DATA TEST"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+BAUD_RATES=(9600 38400 57600 115200 128000 230400 256000 460800)
+FOUND_DATA="no"
+
+for baud in "${BAUD_RATES[@]}"; do
+    echo -n "Testing $baud... "
+    stty -F "$LIDAR_DEVICE" $baud cs8 -cstopb -parenb raw -echo 2>/dev/null
+    TIMEOUT=$([ $baud -lt 115200 ] && echo 5 || echo 3)
+    RAW_DATA=$(timeout $TIMEOUT cat "$LIDAR_DEVICE" 2>&1 | head -c 200)
+    BYTES=${#RAW_DATA}
+    if [ "$BYTES" -gt 10 ]; then
+        echo "✅ DATA FOUND! ($BYTES bytes)"
+        echo "$RAW_DATA" | head -c 64 | hexdump -C | head -2
+        FOUND_DATA="yes"
+        WORKING_BAUD=$baud
+        break
+    else
+        echo "❌ No data"
+    fi
+done
+echo ""
+
+# 4. Physical Check
+echo "4. PHYSICAL CHECK"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+read -p "Is LiDAR motor spinning? (y/n): " -n 1 -r
+MOTOR_SPINNING=$REPLY
+echo ""
+echo ""
+
+# 5. Summary
+echo "=========================================="
+echo "DIAGNOSIS SUMMARY"
+echo "=========================================="
+if [[ ! $MOTOR_SPINNING =~ ^[Yy]$ ]]; then
+    echo "🔴 MOTOR NOT SPINNING = POWER ISSUE"
+    echo ""
+    echo "SOLUTION: Connect external 5V power supply"
+    echo "  → Most RPLidars need external 5V (not just USB)"
+    echo "  → USB provides data, external power spins motor"
+elif [ "$FOUND_DATA" == "no" ]; then
+    echo "🟡 MOTOR SPINNING BUT NO DATA"
+    echo ""
+    echo "Possible: Wrong model, wrong driver, or hardware issue"
+else
+    echo "🟢 SUCCESS! Data found at $WORKING_BAUD baud"
+    echo "Use this baud rate in launch file"
+fi
+SCRIPT_END
+
+chmod +x ~/complete_check.sh
+~/complete_check.sh
+
+================================================================================
+This will check:
+- SDK version compatibility
+- Package installation
+- ALL baud rates (including low ones: 9600, 38400, 57600)
+- Physical motor status
+- Comprehensive diagnosis
+
+================================================================================

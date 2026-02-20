@@ -1,0 +1,73 @@
+{
+  "telemetry": {
+    "description": "Robot telemetry data",
+    "fields": {
+      "timestamp": "ISO8601 datetime string",
+      "source_device": "string (robot_id)",
+      "location": {
+        "x": "float",
+        "y": "float",
+        "theta": "float"
+      },
+      "sensor_data": {
+        "lidar": {
+          "ranges": "array of floats",
+          "angles": "array of floats",
+          "min_range": "float",
+          "max_range": "float"
+        },
+        "camera": {
+          "image_base64": "string",
+          "width": "integer",
+          "height": "integer"
+        }
+      },
+      "status": "string (operational|error|warning)"
+    }
+  },
+  "status": {
+    "description": "Robot status update",
+    "fields": {
+      "timestamp": "ISO8601 datetime string",
+      "source_device": "string (robot_id)",
+      "status": "string (idle|moving|processing|error)",
+      "battery_level": "float (0.0-1.0)",
+      "motors_active": "boolean",
+      "camera_available": "boolean",
+      "lidar_available": "boolean"
+    }
+  },
+  "alerts": {
+    "description": "Alert/obstacle detection",
+    "fields": {
+      "timestamp": "ISO8601 datetime string",
+      "source_device": "string (robot_id)",
+      "alert_type": "string (obstacle|battery_low|error|warning)",
+      "severity": "string (low|medium|high|critical)",
+      "location": {
+        "x": "float",
+        "y": "float"
+      },
+      "ai_message": "string (natural language description)",
+      "correlation_id": "string (UUID)"
+    }
+  },
+  "commands": {
+    "description": "Command from controller to robot",
+    "fields": {
+      "timestamp": "ISO8601 datetime string",
+      "source_device": "string (controller_id)",
+      "target_device": "string (robot_id)",
+      "command_type": "string (move|stop|execute_task|navigate)",
+      "parameters": {
+        "linear_velocity": "float (optional)",
+        "angular_velocity": "float (optional)",
+        "target_x": "float (optional)",
+        "target_y": "float (optional)",
+        "task_id": "string (optional)",
+        "task_params": "object (optional)"
+      },
+      "correlation_id": "string (UUID)"
+    }
+  }
+}

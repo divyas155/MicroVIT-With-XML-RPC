@@ -1,0 +1,79 @@
+================================================================================
+STEP-BY-STEP COMMANDS TO FIX YOUR LIDAR
+================================================================================
+
+STEP 1: Copy script to Nano
+----------------------------
+From your development machine, run:
+
+    scp tools/lidar/diagnose_lidar_nano.sh jetbot@10.13.68.184:~/
+
+If that fails (network issue), skip to STEP 2.
+
+
+STEP 2: SSH to Nano and run diagnostic
+---------------------------------------
+    ssh jetbot@10.13.68.184
+
+Once connected to Nano:
+
+    # If you copied the script in STEP 1:
+    chmod +x diagnose_lidar_nano.sh
+    ./diagnose_lidar_nano.sh
+
+    # OR if copy failed, create script directly on Nano:
+    # (Copy entire content of tools/lidar/diagnose_lidar_nano.sh and paste)
+
+
+STEP 3: Note the working baud rate
+-----------------------------------
+The script will output something like:
+    ✅✅✅ SUCCESS! ✅✅✅
+    Working baud rate: 115200
+
+Remember this number!
+
+
+STEP 4: Enable real LiDAR (from development machine)
+----------------------------------------------------
+Exit SSH (type 'exit'), then from your development machine:
+
+    ./tools/lidar/enable_real_lidar.sh enable <BAUD_RATE>
+
+Replace <BAUD_RATE> with the number from STEP 3 (e.g., 115200)
+
+
+STEP 5: Launch on Nano
+----------------------
+SSH back to Nano and launch:
+
+    roslaunch jetbot_nano_bringup nano_bringup_full.launch
+
+Verify it works:
+
+    rostopic hz /scan
+    rostopic echo /scan -n 1
+
+
+================================================================================
+QUICK MANUAL TEST (If script doesn't work)
+================================================================================
+
+On Nano, open 3 terminals:
+
+Terminal 1:
+    roscore
+
+Terminal 2:
+    rosrun rplidar_ros rplidarNode _serial_port:=/dev/ttyUSB0 _serial_baudrate:=115200
+
+Terminal 3:
+    rostopic echo /scan -n 1
+
+If Terminal 3 shows data → baud rate 115200 works!
+If Terminal 3 times out → try 256000 in Terminal 2
+If still no data → try 230400, then 128000
+
+Once you find working baud rate, go to STEP 4 above.
+
+================================================================================

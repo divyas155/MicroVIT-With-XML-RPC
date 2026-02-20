@@ -1,0 +1,42 @@
+# MQTT Configuration
+# Centralized MQTT topic names and broker settings
+
+mqtt:
+  broker:
+    host: "localhost"  # Change to MQTT broker IP
+    port: 1883
+    username: ""  # Optional
+    password: ""  # Optional
+    keepalive: 60
+    qos: 1  # Quality of Service level (0, 1, or 2)
+
+  topics:
+    # Robot telemetry (published by robots)
+    telemetry: "robots/{robot_id}/telemetry"
+    
+    # Robot status updates
+    status: "robots/{robot_id}/status"
+    
+    # Obstacle/alerts (Robot1 Orin publishes here; Controller subscribes to robots/+/obstacle)
+    obstacle: "robots/{robot_id}/obstacle"
+    alerts: "robots/{robot_id}/alerts"
+    
+    # Commands (Controller publishes here; Robot1/Helper subscribe to robots/{robot_id}/command)
+    command: "robots/{robot_id}/command"
+    commands: "robots/{robot_id}/commands"
+    
+    # Controller status and decisions
+    controller_status: "controller/status"
+    controller_analysis: "controller/analysis"
+    controller_ai_decision: "controller/ai_decision"
+    
+    # Helper robot task execution
+    helper_tasks: "helper/tasks"
+    helper_status: "helper/status"
+
+  # Device IDs
+  devices:
+    robot1_nano: "robot1_nano"
+    robot1_orin: "robot1_orin"
+    controller: "central_controller"
+    helper_robot: "helper_robot"

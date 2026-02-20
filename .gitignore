@@ -1,0 +1,71 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+*.egg-info/
+dist/
+build/
+
+# ROS
+devel/
+build/
+install/
+*.pyc
+.catkin_workspace
+.rosinstall
+
+# Logs
+logs/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+*.env.local
+
+# Test files
+*.jpg
+*.jpeg
+*.png
+*.json
+!common/message_schema/*.json
+!common/config/*.json
+
+# Archives
+_archive_before_cleanup/
+
+# Temporary
+*.tmp
+*.bak
+*.backup
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Compiled
+*.o
+*.a
+*.lib
+*.dll
+*.exe
+
+# Documentation builds
+docs/_build/
+site/

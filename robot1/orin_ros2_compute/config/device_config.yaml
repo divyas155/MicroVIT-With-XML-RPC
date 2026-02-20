@@ -1,0 +1,32 @@
+# Orin ROS2 Compute Device Configuration
+
+device:
+  name: "robot1_orin"
+  type: "jetson_orin"
+  ros_version: "humble"
+
+ai:
+  # Vision model
+  use_microvit: true
+  microvit_model: "apple/mobilevit-small"
+  microvit_variant: "S1"
+  microvit_use_cpu: false
+  
+  # Text generation (Ollama)
+  ollama_host: "http://localhost:11434"
+  ollama_model: "qwen2.5:0.5b"
+  ollama_no_gpu: true  # Set to false if GPU available
+  ollama_max_tokens: 500
+  ollama_context_length: 512
+  
+  # Message generation
+  message_interval: 30  # seconds
+  enable_camera_analysis: true
+  enable_lidar_analysis: true
+
+xmlrpc:
+  # Connection to Nano
+  nano_host: "10.13.68.184"
+  nano_port: 8000
+  connection_timeout: 5.0
+  retry_attempts: 3

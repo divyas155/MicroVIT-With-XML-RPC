@@ -1,0 +1,13 @@
+wheel_base: 0.2
+wheel_radius: 0.03
+
+lidar_rate: 5.0
+lidar_frame_id: "laser"
+
+odom_rate: 10.0
+odom_frame_id: "odom"
+odom_base_frame_id: "base_link"
+odom_linear_speed: 0.05
+
+
+

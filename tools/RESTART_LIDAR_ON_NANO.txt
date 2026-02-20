@@ -1,0 +1,44 @@
+================================================================================
+RESTART LiDAR ON NANO
+================================================================================
+
+The /scan topic shows "no new messages" - LiDAR stopped working.
+
+Quick fix - restart with real LiDAR enabled:
+
+# On Nano, stop current launch (Ctrl+C), then:
+
+cd ~/MicroVIT/robot1/nano_ros1_master
+source /opt/ros/melodic/setup.bash
+source devel/setup.bash
+
+# Restart with real LiDAR explicitly enabled
+roslaunch jetbot_nano_bringup nano_bringup_full.launch \
+    use_dummy_lidar:=false \
+    lidar_serial_baudrate:=115200
+
+================================================================================
+EXPECTED OUTPUT:
+================================================================================
+
+You should see:
+process[rplidarNode-2]: started with pid [xxxxx]
+RPLIDAR S/N: C19CEDF9C7E29BD1A7E39EF2514F431B
+[ INFO] Firmware Ver: 1.29
+[ INFO] Hardware Rev: 7
+[ INFO] RPLidar health status : 0
+[ INFO] current scan mode: Sensitivity, max_distance: 12.0 m
+
+NOT:
+process[nano_lidar_dummy-2]: started with pid [xxxxx]
+[INFO] [nano_lidar_dummy] Publishing dummy /scan at 5.0 Hz
+
+================================================================================
+VERIFY:
+================================================================================
+
+In another terminal:
+rostopic hz /scan
+# Should show ~7 Hz, not "no new messages"
+
+================================================================================

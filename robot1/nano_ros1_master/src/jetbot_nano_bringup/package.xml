@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>jetbot_nano_bringup</name>
+  <version>0.0.1</version>
+  <description>
+    Jetson Nano ROS1 bringup package for Robot1.
+    Provides dummy motor driver, LiDAR, and odometry nodes (no real hardware).
+  </description>
+
+  <maintainer email="you@example.com">Your Name</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <depend>rospy</depend>
+  <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>message_generation</depend>
+  <depend>message_runtime</depend>
+
+  <export>
+  </export>
+</package>
+
+

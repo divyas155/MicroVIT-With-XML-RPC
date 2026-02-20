@@ -1,0 +1,8 @@
+# Request
+bool request_data
+---
+# Response
+sensor_msgs/LaserScan scan_data
+bool success
+string message
+

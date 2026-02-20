@@ -1,0 +1,75 @@
+================================================================================
+QUICK TEST AFTER CHANGING USB PORT
+================================================================================
+
+Run this on your Nano to test the new USB port:
+
+cat > ~/test_new_port.sh << 'EOF'
+#!/bin/bash
+echo "Testing LiDAR with new USB port..."
+
+# Find which device
+if [ -e "/dev/ttyUSB0" ]; then
+    DEV="/dev/ttyUSB0"
+elif [ -e "/dev/ttyUSB1" ]; then
+    DEV="/dev/ttyUSB1"
+else
+    echo "❌ No USB device found!"
+    exit 1
+fi
+
+echo "Using device: $DEV"
+ls -l "$DEV"
+echo ""
+
+# Check motor
+read -p "Is motor spinning? (y/n): " -n 1 -r
+echo ""
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo "🔴 Motor not spinning = Still power issue"
+    echo "   Need external 5V power supply"
+    exit 1
+fi
+
+# Test data
+echo "Testing data..."
+source /opt/ros/melodic/setup.bash
+pkill -9 rplidarNode 2>/dev/null || true
+if ! rostopic list > /dev/null 2>&1; then roscore > /tmp/roscore.log 2>&1 & sleep 3; fi
+
+for baud in 115200 256000 230400; do
+    echo -n "Testing $baud... "
+    stty -F "$DEV" $baud cs8 -cstopb -parenb raw -echo 2>/dev/null
+    DATA=$(timeout 3 cat "$DEV" 2>&1 | head -c 50)
+    if [ ${#DATA} -gt 10 ]; then
+        echo "✅ DATA FOUND!"
+        
+        # Test rplidarNode
+        rosrun rplidar_ros rplidarNode _serial_port:="$DEV" _serial_baudrate:=$baud > /tmp/test.log 2>&1 &
+        sleep 8
+        if timeout 2 rostopic echo /scan -n 1 > /dev/null 2>&1; then
+            echo "✅✅✅ SUCCESS! Working at $baud baud"
+            pkill -9 rplidarNode 2>/dev/null || true
+            exit 0
+        fi
+        pkill -9 rplidarNode 2>/dev/null || true
+    else
+        echo "❌ No data"
+    fi
+done
+
+echo "❌ Still not working"
+EOF
+
+chmod +x ~/test_new_port.sh
+~/test_new_port.sh
+
+================================================================================
+This will:
+1. Find the new USB device (ttyUSB0 or ttyUSB1)
+2. Check if motor is spinning
+3. Test data at multiple baud rates
+4. Test rplidarNode if data found
+5. Report success or next steps
+
+================================================================================

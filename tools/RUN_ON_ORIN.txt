@@ -1,0 +1,82 @@
+================================================================================
+COPY AND PASTE THIS INTO YOUR ORIN TERMINAL
+================================================================================
+
+cat > ~/check_ollama.sh << 'EOF'
+#!/bin/bash
+echo "=========================================="
+echo "Ollama Model Diagnostic and Fix"
+echo "=========================================="
+
+# Check Ollama
+if ! curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
+    echo "Starting Ollama..."
+    OLLAMA_NO_GPU=1 ollama serve > /tmp/ollama.log 2>&1 &
+    sleep 3
+fi
+
+# List models
+echo ""
+echo "Available models:"
+ollama list
+
+# Check for expected models
+MODELS=$(ollama list 2>/dev/null | tail -n +2 | awk '{print $1}' | grep -v "^$")
+FOUND=""
+
+for model in "qwen2.5:0.5b" "qwen2:0.5b" "phi3:mini"; do
+    if echo "$MODELS" | grep -q "^${model}$"; then
+        FOUND="$model"
+        break
+    fi
+done
+
+if [ -z "$FOUND" ]; then
+    echo ""
+    echo "No expected model found. Pulling qwen2.5:0.5b..."
+    ollama pull qwen2.5:0.5b || ollama pull qwen2:0.5b || ollama pull phi3:mini
+    FOUND=$(ollama list | tail -n +2 | awk '{print $1}' | head -1)
+fi
+
+echo ""
+echo "Using model: $FOUND"
+
+# Test model
+echo ""
+echo "Testing model..."
+curl -s http://localhost:11434/api/generate -d "{\"model\":\"$FOUND\",\"prompt\":\"Hello\",\"stream\":false}" | grep -q '"response"' && echo "✅ Model working!" || echo "❌ Model test failed"
+
+# Create .env
+echo ""
+echo "Creating .env file..."
+cat > ~/MicroVIT/robot1/orin_ros2_compute/.env << ENVEOF
+ROBOT_ID=jetson1
+NANO_IP=10.13.68.184
+NANO_PORT=8000
+OLLAMA_HOST=http://localhost:11434
+OLLAMA_MODEL=$FOUND
+OLLAMA_NO_GPU=1
+USE_MICROVIT=true
+MICROVIT_MODEL_NAME=apple/mobilevit-small
+MICROVIT_VARIANT=S1
+MICROVIT_USE_CPU=false
+OLLAMA_TEXT_MODEL=$FOUND
+OLLAMA_MAX_TOKENS=500
+MQTT_BROKER_HOST=localhost
+MQTT_BROKER_PORT=1883
+ENVEOF
+
+echo "✅ .env file created"
+echo ""
+echo "Restart AI service with:"
+echo "  cd ~/MicroVIT/robot1/orin_ros2_compute"
+echo "  source venv/bin/activate"
+echo "  export \$(cat .env | grep -v '^#' | xargs)"
+echo "  cd src"
+echo "  python3 robot1_ai_service_realtime.py --simulation"
+EOF
+
+chmod +x ~/check_ollama.sh
+~/check_ollama.sh
+
+================================================================================

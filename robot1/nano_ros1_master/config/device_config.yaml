@@ -1,0 +1,37 @@
+# Nano ROS1 Master Device Configuration
+
+device:
+  name: "robot1_nano"
+  type: "jetson_nano"
+  ros_version: "melodic"
+
+camera:
+  device: "/dev/video0"
+  backend: "V4L2"
+  format: "MJPG"
+  width: 640
+  height: 480
+  fps: 30
+
+lidar:
+  enabled: true
+  type: "rplidar"  # Options: "dummy", "rplidar"
+  port: "/dev/ttyUSB0"  # For real LiDAR
+  baudrate: 256000  # Try 115200 if 80008000/timeout; many need external 5V (see docs/LIDAR_RESOLVE.md)
+  frame_id: "laser"
+  rate: 5.0  # Hz
+
+motors:
+  driver: "jetbot_motor_driver"
+  port: "/dev/ttyACM0"
+  baudrate: 115200
+  linear_correction: 1.0
+  angular_correction: 1.0
+  cmd_timeout: 0.5
+
+xmlrpc:
+  host: "0.0.0.0"
+  port: 8000
+  enable_camera: true
+  enable_lidar: true
+  enable_odom: true

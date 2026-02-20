@@ -1,0 +1,8 @@
+# Request
+bool request_data
+---
+# Response
+nav_msgs/Odometry odom_data
+bool success
+string message
+

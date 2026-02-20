@@ -1,0 +1,11 @@
+# Request
+bool request_status
+---
+# Response
+bool motors_active
+float64 current_linear_velocity
+float64 current_angular_velocity
+string status_message
+bool success
+
+

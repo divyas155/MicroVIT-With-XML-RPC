@@ -1,0 +1,30 @@
+# Controller (Raspberry Pi) Configuration
+
+device:
+  name: "central_controller"
+  type: "raspberry_pi"
+  ros_version: "none"  # Controller doesn't use ROS
+
+ai:
+  # Text generation (Ollama)
+  ollama_host: "http://localhost:11434"
+  ollama_model: "qwen2.5:0.5b"
+  ollama_no_gpu: true
+  ollama_max_tokens: 300
+  ollama_context_length: 512
+  
+  # Decision making
+  analysis_interval: 10  # seconds
+  obstacle_threshold: 0.5  # meters
+  battery_warning_threshold: 0.2
+
+mqtt:
+  # Must match controller_ai_service.py (subscribe/publish)
+  subscribe_topics:
+    - "robots/+/obstacle"   # Robot1 Orin publishes obstacle events here
+    - "robots/+/status"     # Robot/Helper status updates
+    - "robots/+/telemetry"  # Optional telemetry
+  publish_topics:
+    - "robots/{robot_id}/command"  # Commands to Robot1 Orin / Helper Robot
+    - "controller/status"
+    - "controller/ai_decision"

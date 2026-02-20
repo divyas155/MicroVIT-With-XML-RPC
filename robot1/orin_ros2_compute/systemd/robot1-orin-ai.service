@@ -1,0 +1,19 @@
+[Unit]
+Description=Robot1 Orin AI Service
+After=network.target
+
+[Service]
+Type=simple
+User=jetbot
+WorkingDirectory=/home/jetbot/MicroVIT/robot1/orin_ros2_compute/src
+Environment="NANO_IP=10.13.68.184"
+Environment="NANO_PORT=8000"
+Environment="MQTT_BROKER_HOST=10.13.68.48"
+Environment="OLLAMA_NO_GPU=1"
+ExecStartPre=/bin/bash -c 'curl -s http://localhost:11434/api/tags > /dev/null || (OLLAMA_NO_GPU=1 ollama serve & sleep 3)'
+ExecStart=/bin/bash -c 'source /home/jetbot/MicroVIT/robot1/orin_ros2_compute/venv/bin/activate && python3 robot1_ai_service_realtime.py --simulation'
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
