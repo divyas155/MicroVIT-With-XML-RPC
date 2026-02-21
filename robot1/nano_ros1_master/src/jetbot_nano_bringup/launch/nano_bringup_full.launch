@@ -3,13 +3,14 @@
   <!-- This launch file starts EVERYTHING needed for the robot to move -->
   <!-- Uses Python motor driver (more reliable than C++ jetbot_pro) -->
 
-  <!-- REAL SENSORS ONLY - No dummy nodes -->
-  <!-- Real odometry from motor driver, real LiDAR from rplidarNode -->
-  <!-- Set use_lidar:=false to skip LiDAR if device times out (Orin will use dummy LiDAR). -->
+  <!-- REAL SENSORS ONLY - No dummy/fallback when use_dummy:=false -->
+  <!-- Real odometry from motor driver, real LiDAR from rplidarNode, real camera from /dev/video* -->
   <arg name="use_lidar" default="true" />
+  <arg name="use_camera" default="true" />
+  <arg name="use_odom_dummy" default="false" />
   <arg name="lidar_serial_port" default="/dev/ttyUSB0" />
-  <!-- Try 256000 if 115200 gives RESULT_OPERATION_TIMEOUT / 80008000 -->
-  <arg name="lidar_serial_baudrate" default="256000" />
+  <!-- Many RPLidar A1/A2M8 need 115200; try 256000 if yours works at higher baud -->
+  <arg name="lidar_serial_baudrate" default="115200" />
 
   <!-- ========== JETBOT PRO MOTOR DRIVER (Python) ========== -->
   <node pkg="jetbot_nano_bringup"
@@ -40,16 +41,40 @@
     <param name="frame_id" value="laser"/>
   </node>
 
-  <!-- ========== XML-RPC SERVER (REALTIME with camera) ========== -->
-  <!-- Use /dev/video1 if your USB camera appears there (avoids video0 open errors in log) -->
-  <arg name="camera_device" default="/dev/video1" />
+  <!-- Odometry: motor driver publishes real /odom. Odom dummy only when use_odom_dummy:=true (simulated when motor has no encoders). -->
+  <node pkg="jetbot_nano_bringup" type="odom_dummy_node.py" name="nano_odom_dummy"
+        output="screen" respawn="true" if="$(arg use_odom_dummy)">
+    <param name="rate" value="10.0"/>
+    <param name="frame_id" value="odom"/>
+    <param name="base_frame_id" value="base_link"/>
+  </node>
+
+  <!-- ========== CAMERA (REAL ONLY - no dummy, respawn=false to avoid storm) ========== -->
+  <!-- 320x240 reduces USB load; helps when dmesg shows "Cannot enable. Maybe the USB cable is bad?" -->
+  <arg name="camera_device" default="/dev/video0" />
+  <arg name="camera_width" default="320" />
+  <arg name="camera_height" default="240" />
+  <param name="camera_width" value="$(arg camera_width)" />
+  <param name="camera_height" value="$(arg camera_height)" />
+  <node pkg="jetbot_nano_bringup"
+        type="camera_publisher_node.py"
+        name="nano_camera_publisher"
+        output="screen"
+        respawn="false"
+        if="$(arg use_camera)">
+    <param name="camera_device" value="$(arg camera_device)" />
+    <param name="camera_width" value="$(arg camera_width)" />
+    <param name="camera_height" value="$(arg camera_height)" />
+    <param name="rate" value="5.0" />
+  </node>
+
+  <!-- ========== XML-RPC SERVER (gets camera from /nano/camera/image_compressed) ========== -->
   <node pkg="jetbot_nano_bringup"
         type="xmlrpc_server_nano_realtime.py"
         name="nano_xmlrpc_server"
         output="screen"
         respawn="true"
         respawn_delay="3">
-    <param name="camera_device" value="$(arg camera_device)" />
   </node>
 
   <!-- Motor Service Server (backup) -->
@@ -61,6 +86,25 @@
         respawn_delay="2">
     <param name="wheel_base" value="0.2" />
     <param name="wheel_radius" value="0.03" />
+  </node>
+
+  <!-- ========== AUTONOMOUS DRIVER (move when clear, stop when obstacle < threshold) ========== -->
+  <!-- front sector only: side/rear obstacles ignored so robot resumes when path ahead is clear -->
+  <arg name="use_autonomous" default="true" />
+  <arg name="obstacle_threshold" default="0.5" />
+  <arg name="forward_sector_deg" default="90" />
+  <arg name="forward_angle_offset_deg" default="0" />
+  <node pkg="jetbot_nano_bringup"
+        type="autonomous_driver_node.py"
+        name="autonomous_driver"
+        output="screen"
+        respawn="true"
+        if="$(arg use_autonomous)">
+    <param name="obstacle_threshold" value="$(arg obstacle_threshold)" />
+    <param name="forward_sector_deg" value="$(arg forward_sector_deg)" />
+    <param name="forward_angle_offset_deg" value="$(arg forward_angle_offset_deg)" />
+    <param name="forward_speed" value="0.2" />
+    <param name="rate" value="10.0" />
   </node>
 
   <!-- TF: base_footprint to laser -->

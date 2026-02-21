@@ -8,7 +8,7 @@ Type=simple
 User=jetbot
 WorkingDirectory=/home/jetbot/MicroVIT/robot1/nano_ros1_master
 Environment="ROS_MASTER_URI=http://localhost:11311"
-ExecStart=/bin/bash -c 'source /opt/ros/melodic/setup.bash && source /home/jetbot/MicroVIT/robot1/nano_ros1_master/devel/setup.bash && roslaunch jetbot_nano_bringup nano_bringup_full.launch'
+ExecStart=/bin/bash -c 'source /opt/ros/melodic/setup.bash && source /home/jetbot/MicroVIT/robot1/nano_ros1_master/devel/setup.bash && roslaunch jetbot_nano_bringup nano_bringup_full.launch use_lidar:=true lidar_serial_baudrate:=115200 camera_device:=/dev/video1'
 Restart=always
 RestartSec=10
 

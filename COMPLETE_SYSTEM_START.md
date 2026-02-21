@@ -1,6 +1,157 @@
 # Complete System Start (Controller + Nano + Orin)
 
-Use this order every time. **Your LiDAR needs 115200 baud** — use `lidar_serial_baudrate:=115200` on the Nano.
+Use this order every time. **REAL SENSORS ONLY** — no dummy/fallback. Camera, LiDAR, and odometry must all be real for Orin to generate AI messages.
+
+- **Camera:** Real USB camera on `/dev/video0` or `/dev/video1` (no placeholder)
+- **LiDAR:** Real RPLIDAR with `use_lidar:=true` (no dummy LiDAR)
+- **Odometry:** Motor driver publishes real `/odom` (use_odom_dummy:=false by default)
+
+**LiDAR baud:** 115200 — use `lidar_serial_baudrate:=115200` on the Nano.
+
+---
+
+## Step-by-step startup (all components)
+
+Open 5–6 terminals. Follow in order:
+
+| Step | Machine | Action |
+|------|---------|--------|
+| 1 | Controller Pi | MQTT broker + Controller AI |
+| 2 | Nano | ROS bringup (camera, LiDAR, motor, XML-RPC) |
+| 3 | Orin (Terminal A) | Ollama server |
+| 4 | Orin (Terminal B) | Robot1 AI service |
+| 5 | Helper Robot *(optional)* | Helper AI service |
+
+---
+
+### Step 1: Controller Pi
+
+**SSH to Controller:**
+
+```bash
+ssh pi@10.13.68.48
+```
+
+**Start MQTT broker and Controller AI:**
+
+```bash
+sudo systemctl start mosquitto
+sudo systemctl start controller-ai.service
+```
+
+**Verify:**
+
+```bash
+systemctl is-active mosquitto       # should print: active
+systemctl is-active controller-ai.service   # should print: active
+```
+
+You can exit SSH; the services keep running.
+
+---
+
+### Step 2: Nano (Robot1)
+
+**SSH to Nano:**
+
+```bash
+ssh jetbot@10.13.68.184
+```
+
+**Start ROS bringup (real sensors only):**
+
+```bash
+source /opt/ros/melodic/setup.bash
+cd ~/MicroVIT/robot1/nano_ros1_master
+[ -d devel ] || catkin_make
+source devel/setup.bash
+roslaunch jetbot_nano_bringup nano_bringup_full.launch use_lidar:=true lidar_serial_baudrate:=115200 camera_device:=/dev/video0 use_odom_dummy:=false
+```
+
+Use `camera_device:=/dev/video1` if your camera is on video1.
+
+**Optional (if camera drops mid-session):** Disable USB autosuspend before starting:
+```bash
+~/disable_usb_autosuspend.sh   # after copying tools/camera/disable_usb_autosuspend.sh
+```
+
+**Note:** Controller AI uses **Orin's Ollama** (`OLLAMA_HOST=http://10.13.68.159:11434`) — Ollama runs on Orin only, not on the Pi. Ensure Ollama is running on Orin (step 3) before the Controller processes obstacles.
+
+**Keep this terminal open.** Expect:
+
+- `[JetBot Motor Driver] Serial connected to /dev/ttyACM0`
+- `[Nano Camera] Opened /dev/video0 via V4L2 (320x240)` and `Publishing to /nano/camera/image_compressed`
+- `RPLIDAR S/N: ...`
+- `Nano XML-RPC Server REALTIME Started on 0.0.0.0:8000`
+
+---
+
+### Step 3: Orin – Ollama (Terminal A)
+
+**Open a new terminal, SSH to Orin:**
+
+```bash
+ssh jetbot@10.13.68.159
+OLLAMA_NO_GPU=1 ollama serve
+```
+
+**Keep this terminal open.** Ollama must be running before the Robot1 AI service.
+
+---
+
+### Step 4: Orin – Robot1 AI service (Terminal B)
+
+**Open another terminal, SSH to Orin:**
+
+```bash
+ssh jetbot@10.13.68.159
+cd ~/MicroVIT/robot1/orin_ros2_compute
+[ -d venv ] && source venv/bin/activate
+set -a; [ -f config/.env ] && . config/.env; set +a
+export USE_MICROVIT=true
+python src/robot1_ai_service_realtime.py --interval 5
+```
+
+**Keep this terminal open.** Expect:
+
+- `✅ XML-RPC connected to Nano at http://10.13.68.184:8000`
+- `Camera available: True`
+- `✅ MQTT Connected successfully`
+- `Starting continuous REALTIME detection every 5 seconds`
+
+---
+
+### Step 5: Helper Robot *(optional)*
+
+**If you have a Helper Robot, SSH to it:**
+
+```bash
+ssh jetbot@<helper_robot_ip>
+```
+
+**Start the Helper AI service:**
+
+```bash
+cd ~/MicroVIT/helper_robot
+[ -d venv ] && source venv/bin/activate
+set -a; [ -f config/.env ] && . config/.env; set +a
+# Ensure MQTT broker points to Controller: MQTT_BROKER_HOST=10.13.68.48
+python src/helper_robot_ai_service.py
+```
+
+Or use systemd if installed:
+
+```bash
+sudo systemctl start helper-robot-ai.service
+```
+
+---
+
+### Quick verification
+
+- **Controller:** `ssh pi@10.13.68.48` → `sudo journalctl -u controller-ai.service -n 20` (MQTT, Ollama)
+- **Nano:** `ssh jetbot@10.13.68.184` → `source /opt/ros/melodic/setup.bash` → `rosnode list` (includes `rplidarNode`, `nano_xmlrpc_server`) and `rostopic hz /scan` (~5–10 Hz)
+- **Orin:** Robot1 AI terminal shows `Published REALTIME obstacle event` periodically
 
 ---
 
@@ -30,7 +181,7 @@ systemctl is-active controller-ai.service   # should print: active
 
 ### 2. Nano – ROS1 bringup (camera, LiDAR at 115200, motor, XML-RPC)
 
-**Important:** You must `cd` to the workspace and `source devel/setup.bash` so `roslaunch` finds `jetbot_nano_bringup`. Use **115200** for LiDAR. Use **camera_device:=/dev/video1** if your USB camera is on video1 (avoids VIDEOIO errors). If LiDAR keeps failing (80008000), use **use_lidar:=false** so dummy LiDAR runs and nodes stay up (see **System recovery** below).
+**Important:** You must `cd` to the workspace and `source devel/setup.bash` so `roslaunch` finds `jetbot_nano_bringup`. **REAL sensors only:** `use_lidar:=true` (real RPLIDAR), `use_camera:=true` (real camera), `use_odom_dummy:=false` (motor driver odom). Use **camera_device:=/dev/video1** if your camera is on video1.
 
 ```bash
 ssh jetbot@10.13.68.184
@@ -38,18 +189,23 @@ source /opt/ros/melodic/setup.bash
 cd ~/MicroVIT/robot1/nano_ros1_master
 [ -d devel ] || catkin_make
 source devel/setup.bash
-roslaunch jetbot_nano_bringup nano_bringup_full.launch use_lidar:=true lidar_serial_baudrate:=115200 camera_device:=/dev/video1
+roslaunch jetbot_nano_bringup nano_bringup_full.launch use_lidar:=true lidar_serial_baudrate:=115200 camera_device:=/dev/video0 use_odom_dummy:=false
 ```
 
 **Note:** There is a **space** between `nano_bringup_full.launch` and `use_lidar:=true` (typo to avoid: `.launcuse_lidar`).
 
 Leave this terminal running. You should see:
-- `[JetBot Motor Driver] Serial connected to /dev/ttyACM0`
-- `✅ Camera initialized on /dev/video1` (or `/dev/video0`)
-- `RPLIDAR S/N: ...` and `current scan mode: Sensitivity...` (or, if use_lidar:=false, dummy LiDAR)
-- `Nano XML-RPC Server REALTIME] Started on 0.0.0.0:8000`
+- `[JetBot Motor Driver] Serial connected to /dev/ttyACM0` (real odom from motor)
+- `[Nano Camera] REAL camera publishing to /nano/camera/image_compressed` (real camera only; if no camera, node exits)
+- `RPLIDAR S/N: ...` and `current scan mode: Sensitivity...` (real LiDAR)
+- `[Autonomous Driver] Move forward at 0.20 m/s, stop when obstacle < 0.50 m`
+- `Nano XML-RPC Server REALTIME Started on 0.0.0.0:8000`
 
-**If nodes keep exiting:** XML-RPC and motor service nodes now **respawn** after 2–3 s. If the whole launch still shuts down, try **use_lidar:=false** so the LiDAR driver isn’t failing. **If the camera does not start** (you see `⚠️ Camera ... not found/open`), see **Camera not started** below.
+**To disable autonomous drive** (manual/remote control only): add `use_autonomous:=false` to the roslaunch command.
+
+**Robot won't resume after obstacle removed?** Only obstacles in the **front sector** (default ±45°) stop the robot; side/rear are ignored. If it still won't move, the LiDAR's "forward" may be misaligned — try `forward_angle_offset_deg:=180` in the launch, or widen the sector: `forward_sector_deg:=120`.
+
+**If camera fails:** The camera node exits when no `/dev/video*` is available (REAL ONLY). Fix camera hardware (plug in, chmod 666 /dev/video0), then restart. For LiDAR ensure RPLIDAR connected at 115200. use_odom_dummy:=true only if motor has no encoders. See Camera not started below. If LiDAR driver isn’t failing. **If the camera does not start** (you see `⚠️ Camera ... not found/open`), see **Camera not started** below.
 
 ---
 
@@ -104,6 +260,24 @@ catkin_make
 source devel/setup.bash
 # Then run the roslaunch from step 2.
 ```
+
+---
+
+## "Multiple files named nano_bringup_full.launch"
+
+If `roslaunch` fails with:
+
+```
+RLException: multiple files named [nano_bringup_full.launch] in package [jetbot_nano_bringup]
+```
+
+Remove the duplicate (keep only the one in `launch/`):
+
+```bash
+rm -f ~/MicroVIT/robot1/nano_ros1_master/src/jetbot_nano_bringup/nano_bringup_full.launch
+```
+
+Then run `catkin_make` and `roslaunch` again.
 
 ---
 
@@ -171,6 +345,41 @@ After fixing, restart the Nano bringup (step 2 in Option B). If you changed the 
 
 ---
 
+## Camera disconnects or "Cannot enable. Maybe the USB cable is bad?"
+
+**dmesg shows:** `usb 1-2-port2: Cannot enable`, `USB disconnect`, `usb_suspend_both` — the camera works briefly then drops. This is usually **USB power** or **cable**, not a software bug.
+
+**Software changes (already applied):**
+- **320×240 resolution** — reduces USB bandwidth by ~4× vs 640×480; helps stability. Override: `camera_width:=640 camera_height:=480`.
+- **USB autosuspend off** — run before bringup on Nano:
+  ```bash
+  scp tools/camera/disable_usb_autosuspend.sh jetbot@10.13.68.184:~/
+  ssh jetbot@10.13.68.184 'chmod +x ~/disable_usb_autosuspend.sh && ~/disable_usb_autosuspend.sh'
+  ```
+  Then start `roslaunch` as usual.
+
+**Hardware fixes (most important):**
+1. **Powered USB hub** — the Nano often can’t supply enough power for camera + LiDAR + motors.
+2. **Short, good-quality USB cable**
+3. **Logitech C270/C920** — use a known UVC camera.
+4. **Different USB port** — try another port on the Nano or hub.
+5. **Node retries every 30 s** — replug the camera and wait; no need to restart roslaunch.
+
+---
+
+## Camera switches off or camera node crashes
+
+**Note:** Camera runs in a separate node (`nano_camera_publisher`). When camera is lost, the node stays alive and retries every 30s; XML-RPC keeps running.
+
+If the camera keeps failing:
+
+1. **USB power**: The Nano’s USB ports may not deliver enough power for camera + LiDAR + motors. Use a **powered USB hub** or a camera with its own power.
+2. **Copy full package** from Mac: `scp -r robot1/nano_ros1_master jetbot@10.13.68.184:~/MicroVIT/robot1/` then on Nano: `cd ~/MicroVIT/robot1/nano_ros1_master && catkin_make`
+3. **Try a different USB port** on the Nano.
+4. **Reduce load**: Run with `use_lidar:=false` to test if the camera stays on; if it does, USB power is likely the limit.
+
+---
+
 ## AI message uses test image instead of real camera
 
 If Robot1’s AI messages are generated from a **gray “FALLBACK TEST IMAGE”** instead of the real camera:
@@ -229,6 +438,80 @@ python3 tools/test_nano_orin_connection.py
 ```
 
 You should see `✅ SUCCESS: Orin can reach Nano.` If not, the script prints the same checks (ping, nc) and confirms whether the problem is network or Nano not running.
+
+---
+
+## Robot1 not generating AI messages (MQTT / Ollama / MicroViT)
+
+If the Orin AI service runs but **no AI messages appear** on the Controller or MQTT monitor:
+
+**1. MQTT broker is on the Controller, not on Orin**
+
+The Robot1 AI service must connect to the **Controller’s** MQTT broker (10.13.68.48). If `MQTT_BROKER_HOST` is unset or `localhost`, messages are never published.
+
+- **Check startup log** for: `MQTT broker 10.13.68.48:1883` (correct) vs `localhost:1883` (wrong).
+- **Fix:** On Orin, either copy `config/.env.template` to `config/.env` with `MQTT_BROKER_HOST=10.13.68.48`, or ensure `config/device_config.yaml` has `mqtt.broker_host: "10.13.68.48"`.
+- **Verify** Controller: `ssh pi@10.13.68.48` → `sudo systemctl status mosquitto` must be active.
+- **Test from Orin:** `mosquitto_pub -h 10.13.68.48 -t test -m hello` (install `mosquitto-clients` if needed).
+
+**2. Ollama model mismatch**
+
+The service uses `qwen2.5:0.5b` (from `device_config.yaml` or `.env`). If it falls back to `phi3:mini` and that model is not installed, Ollama fails and you get fallback text instead of AI generation.
+
+- **Check startup log** for: `Ollama ... model=qwen2.5:0.5b` (correct).
+- **On Orin:** `ollama list` — ensure `qwen2.5:0.5b` is present. If not: `ollama pull qwen2.5:0.5b`.
+- **Config:** `config/device_config.yaml` should have `ai.ollama_model: "qwen2.5:0.5b"` (default). Or set `OLLAMA_MODEL=qwen2.5:0.5b` in `config/.env`.
+
+**3. MicroViT not enabled**
+
+If `USE_MICROVIT=false` (or unset) and no VIT model, the service uses a simple fallback message (no real AI). MicroViT gives fast image preprocessing and proper AI messages.
+
+- **Check startup log** for: `🚀 Using MicroViT model` → MicroViT enabled.
+- **Fix:** Set `USE_MICROVIT=true` when starting, or ensure `config/device_config.yaml` has `ai.use_microvit: true`.
+
+**4. MQTT not connected — explicit error**
+
+Every cycle the service checks MQTT connection. If you see:
+```text
+❌ MQTT not connected — AI message NOT published
+```
+then the broker is unreachable. Ensure:
+- Controller mosquitto is running.
+- Orin can reach 10.13.68.48:1883 (`nc -zv 10.13.68.48 1883`).
+- `MQTT_BROKER_HOST` or `device_config` points to 10.13.68.48.
+
+**5. Watch messages from your Mac**
+
+```bash
+mosquitto_sub -h 10.13.68.48 -t "robots/#" -t "controller/#" -v
+```
+
+You should see `robots/jetson1/obstacle` with JSON payloads when Robot1 publishes.
+
+---
+
+## Controller: "Error getting AI decision ... Read timed out" / "No AI decision received"
+
+The Controller uses **Orin's Ollama** for AI decisions (not local on Pi). If you see `HTTPConnectionPool(host='localhost', port=11434): Read timed out`:
+
+1. **Controller was using localhost** — it should use Orin's Ollama. Update Controller config:
+   ```bash
+   # On Controller, create/update config/.env
+   echo 'OLLAMA_HOST=http://10.13.68.159:11434' >> ~/MicroVIT/controller_rpi/config/.env
+   echo 'OLLAMA_MODEL=qwen2.5:0.5b' >> ~/MicroVIT/controller_rpi/config/.env
+   echo 'AI_TIMEOUT=60' >> ~/MicroVIT/controller_rpi/config/.env
+   ```
+
+2. **Update systemd** and restart:
+   ```bash
+   sudo cp ~/MicroVIT/controller_rpi/systemd/controller-ai.service /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl restart controller-ai.service
+   ```
+
+3. **Ensure Ollama is running on Orin** (step 3 in startup) — Controller needs it for AI decisions.
+
+4. **Network:** From Controller, `curl -s http://10.13.68.159:11434/api/tags` should return a JSON list of models.
 
 ---
 

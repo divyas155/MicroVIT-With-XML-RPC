@@ -6,9 +6,11 @@ After=network.target
 Type=simple
 User=pi
 WorkingDirectory=/home/pi/MicroVIT/controller_rpi/src
-Environment="OLLAMA_NO_GPU=1"
-ExecStartPre=/bin/bash -c 'curl -sf http://localhost:11434/api/tags >/dev/null || { OLLAMA_NO_GPU=1 nohup ollama serve >/dev/null 2>&1 & for i in $(seq 1 24); do sleep 5; curl -sf http://localhost:11434/api/tags >/dev/null && break; done; }; sleep 2'
-ExecStart=/bin/bash -c 'source /home/pi/MicroVIT/controller_rpi/venv/bin/activate && python3 controller_ai_service.py'
+# Use Orin's Ollama (already running for Robot1). Set OLLAMA_HOST in config/.env to override.
+Environment="OLLAMA_HOST=http://10.13.68.159:11434"
+Environment="OLLAMA_MODEL=qwen2.5:0.5b"
+Environment="AI_TIMEOUT=60"
+ExecStart=/bin/bash -c 'source /home/pi/MicroVIT/controller_rpi/venv/bin/activate && [ -f ../config/.env ] && set -a && . ../config/.env && set +a; exec python3 controller_ai_service.py'
 Restart=always
 RestartSec=10
 

@@ -298,11 +298,12 @@ class HelperRobotAIService:
         """Process incoming command with AI analysis"""
         try:
             action = command.get('action', 'unknown')
-            location = command.get('location', {})
+            # Prefer obstacle_coordinates when delegating to helper (Controller passes obstacle coords)
+            location = command.get('obstacle_coordinates') or command.get('location', {})
             priority = command.get('priority', 'medium')
             ai_decision = command.get('ai_decision', '')
             
-            logger.info(f"Processing {action} command with AI analysis")
+            logger.info(f"Processing {action} command — target location (obstacle coords): {location}")
             
             # Use AI to understand the command
             ai_understanding = self.understand_command_with_ai(action, ai_decision, location)

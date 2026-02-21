@@ -6,8 +6,8 @@ device:
   ros_version: "none"  # Controller doesn't use ROS
 
 ai:
-  # Text generation (Ollama)
-  ollama_host: "http://localhost:11434"
+  # Text generation - use Orin's Ollama (Pi too slow for local)
+  ollama_host: "http://10.13.68.159:11434"
   ollama_model: "qwen2.5:0.5b"
   ollama_no_gpu: true
   ollama_max_tokens: 300

@@ -24,6 +24,11 @@ ai:
   enable_camera_analysis: true
   enable_lidar_analysis: true
 
+mqtt:
+  # Controller Pi runs MQTT broker - Robot1 must connect here to publish obstacle events
+  broker_host: "10.13.68.48"
+  broker_port: 1883
+
 xmlrpc:
   # Connection to Nano
   nano_host: "10.13.68.184"

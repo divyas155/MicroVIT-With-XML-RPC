@@ -190,15 +190,19 @@ class ControllerAIService:
                 confidence = obstacle_data['lidar_data'].get('confidence', 0.5)
             confidence = confidence if confidence is not None else 0.5
             loc = obstacle_data.get('location', {})
+            obs_coords = obstacle_data.get('obstacle_coordinates') or loc
             obs_type = obstacle_data.get('obstacle_type') or obstacle_data.get('message_type') or 'unknown'
             # Keep prompt short so Ollama on Pi can respond within timeout (qwen2.5 is slow)
             msg_preview = (natural_message[:280] + "...") if len(natural_message) > 280 else natural_message
             situation = (
                 f"Robot {robot_id} reported obstacle ({obs_type}, severity {obstacle_data.get('severity', 'medium')}). "
+                f"Robot position: ({loc.get('x', 'N/A')}, {loc.get('y', 'N/A')}). "
+                f"Obstacle coordinates: ({obs_coords.get('x', 'N/A')}, {obs_coords.get('y', 'N/A')}). "
                 f"Summary: {msg_preview}\n\n"
                 "You must reply in two parts.\n"
                 "Part 1 - One short sentence in plain English for the human operator (what is happening and what you recommend). Do not use JSON here.\n"
-                "Part 2 - On the next line, only a JSON object with: action_type (investigation, obstacle_removal, reroute, or monitor), target_robot (robot1_orin or helper_robot), reasoning (brief), priority (high, medium, or low).\n"
+                "Part 2 - On the next line, only a JSON object with: action_type (investigation, obstacle_removal, reroute, or monitor), target_robot (robot1_orin or helper_robot), reasoning (brief), priority (high, medium, or low). "
+                "Use helper_robot for investigation/obstacle_removal so it navigates to the obstacle coordinates.\n"
                 "Example Part 1: Recommend sending the robot to investigate the obstacle and adjust path if needed.\n"
                 "Example Part 2: {\"action_type\":\"investigation\",\"target_robot\":\"robot1_orin\",\"reasoning\":\"obstacle detected\",\"priority\":\"medium\"}"
             )
@@ -330,13 +334,19 @@ class ControllerAIService:
             priority = ai_decision.get('priority', 'medium')
             human_message = ai_decision.get('message', '')
             
+            # Map AI target names to MQTT robot IDs
+            target_robot = {'helper_robot': 'jetson2', 'robot1_orin': 'jetson1', 'jetson1': 'jetson1', 'jetson2': 'jetson2'}.get(target_robot, target_robot)
+            
             if human_message:
                 logger.info(f"Controller AI Message: {human_message}")
             
             logger.info(f"Executing AI decision: {action_type} for {target_robot}")
             
-            # Create command based on AI decision
+            # Use obstacle coordinates for task location when delegating to helper (so helper navigates to obstacle)
             loc = obstacle_data.get('location', {})
+            obs_coords = obstacle_data.get('obstacle_coordinates')
+            task_location = obs_coords if obs_coords and target_robot == 'jetson2' else loc
+            
             obs_type = obstacle_data.get('obstacle_type') or obstacle_data.get('message_type') or 'unknown'
             command = {
                 "command_id": str(uuid.uuid4()),
@@ -345,7 +355,9 @@ class ControllerAIService:
                 "recipient": target_robot,
                 "action": action_type,
                 "priority": priority,
-                "location": loc,
+                "location": task_location,
+                "obstacle_coordinates": obs_coords or loc,
+                "robot_position": loc,
                 "obstacle_type": obs_type,
                 "ai_decision": decision_text,
                 "ai_reasoning": reasoning,

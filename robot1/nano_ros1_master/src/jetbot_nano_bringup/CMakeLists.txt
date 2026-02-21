@@ -39,6 +39,9 @@ catkin_install_python(PROGRAMS
   nodes/motor_service_server.py
   nodes/sensor_service_server.py
   nodes/xmlrpc_server_nano.py
+  nodes/xmlrpc_server_nano_realtime.py
+  nodes/camera_publisher_node.py
+  nodes/autonomous_driver_node.py
   nodes/lidar_dummy_node.py
   nodes/odom_dummy_node.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

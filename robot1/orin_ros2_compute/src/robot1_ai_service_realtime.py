@@ -29,7 +29,6 @@ import paho.mqtt.client as mqtt
 import logging
 import os
 from dotenv import load_dotenv
-from PIL import Image, ImageDraw
 import xmlrpc.client
 import http.client
 import sys
@@ -77,21 +76,37 @@ load_dotenv(os.path.join(_pkg_dir, '.env'))
 load_dotenv(os.path.join(_pkg_dir, 'config', '.env'))
 
 
-def _nano_ip_from_config():
-    """Read Nano IP from config/device_config.yaml so repo config overrides wrong NANO_IP in env."""
+def _device_config_value(pattern: str, default=None):
+    """Read first match from config/device_config.yaml using regex. Returns default if not found."""
     import re
     path = os.path.join(_pkg_dir, 'config', 'device_config.yaml')
     if not os.path.isfile(path):
-        return None
+        return default
     try:
         with open(path, 'r') as f:
             content = f.read()
-        m = re.search(r'nano_host:\s*["\']([^"\']+)["\']', content)
+        m = re.search(pattern, content)
         if m:
             return m.group(1).strip()
     except Exception:
         pass
-    return None
+    return default
+
+
+def _nano_ip_from_config():
+    """Read Nano IP from config/device_config.yaml."""
+    return _device_config_value(r'nano_host:\s*["\']([^"\']+)["\']')
+
+
+def _ai_config_from_device():
+    """Read AI and MQTT from device_config.yaml (used when env vars are not set)."""
+    return {
+        'ollama_host': _device_config_value(r'ollama_host:\s*["\']([^"\']+)["\']', 'http://localhost:11434'),
+        'ollama_model': _device_config_value(r'ollama_model:\s*["\']([^"\']+)["\']', 'phi3:mini'),
+        'use_microvit': _device_config_value(r'use_microvit:\s*(true|false)', 'false').lower() == 'true',
+        'broker_host': _device_config_value(r'broker_host:\s*["\']([^"\']+)["\']', 'localhost'),
+        'broker_port': _device_config_value(r'broker_port:\s*(\d+)', '1883'),
+    }
 
 # Setup logging
 _log_dir = os.getenv('LOG_DIR', './logs')
@@ -115,14 +130,21 @@ class Robot1AIServiceRealtime:
     """
     
     def __init__(self):
+        _cfg = _ai_config_from_device()
         self.robot_id = os.getenv('ROBOT_ID', 'jetson1')
-        self.ollama_host = os.getenv('OLLAMA_HOST', 'http://localhost:11434')
-        self.ollama_model = os.getenv('OLLAMA_MODEL', 'phi3:mini')
-        self.mqtt_broker_host = os.getenv('MQTT_BROKER_HOST', 'localhost')
-        self.mqtt_broker_port = int(os.getenv('MQTT_BROKER_PORT', 1883))
-        # Prefer device_config.yaml nano_host so correct Nano IP is used even if NANO_IP env is wrong
+        self.ollama_host = os.getenv('OLLAMA_HOST') or _cfg['ollama_host']
+        self.ollama_model = os.getenv('OLLAMA_MODEL') or _cfg['ollama_model']
+        self.mqtt_broker_host = os.getenv('MQTT_BROKER_HOST') or _cfg['broker_host']
+        self.mqtt_broker_port = int(os.getenv('MQTT_BROKER_PORT') or _cfg['broker_port'])
+        # Prefer device_config.yaml nano_host. Fallback to NANO_IP env or 10.13.68.184.
+        # Fix: 172.27.x.x is often wrong (Docker/bridge); use standard Nano LAN IP.
+        _default_nano = '10.13.68.184'
         _cfg_ip = _nano_ip_from_config()
-        self.nano_ip = _cfg_ip or os.getenv('NANO_IP', '10.13.68.184')
+        _env_ip = os.getenv('NANO_IP')
+        self.nano_ip = _cfg_ip or _env_ip or _default_nano
+        if self.nano_ip.startswith('172.27.'):
+            logger.warning("NANO_IP %s looks wrong (Docker/bridge). Using %s for Nano XML-RPC.", self.nano_ip, _default_nano)
+            self.nano_ip = _default_nano
         _cfg_port = None
         if os.path.isfile(os.path.join(_pkg_dir, 'config', 'device_config.yaml')):
             try:
@@ -135,6 +157,7 @@ class Robot1AIServiceRealtime:
                 pass
         self.nano_port = _cfg_port if _cfg_port is not None else int(os.getenv('NANO_PORT', '8000'))
         self.mqtt_client = None
+        self._mqtt_connected = False
         self.detection_count = 0
         self.nano_xmlrpc = None
         # Keep last known odometry so we can fall back if Nano odom disappears mid-run.
@@ -150,17 +173,20 @@ class Robot1AIServiceRealtime:
             "source": "FALLBACK"
         }
         
-        # Check if using MicroViT (highest priority - fastest preprocessing)
-        self.use_microvit = MICROVIT_AVAILABLE and os.getenv('USE_MICROVIT', 'false').lower() == 'true'
+        # Check if using MicroViT (env overrides device_config; device_config enables by default)
+        _use_microvit_env = os.getenv('USE_MICROVIT')
+        _use_microvit_cfg = _cfg['use_microvit']
+        _use_microvit_val = (_use_microvit_env if _use_microvit_env is not None else ('true' if _use_microvit_cfg else 'false')).lower() == 'true'
+        self.use_microvit = MICROVIT_AVAILABLE and _use_microvit_val
         self.microvit_model = None
         
         # Check if using VIT
         self.use_vit = VIT_AVAILABLE and ('vit' in self.ollama_model.lower() or 'blip' in self.ollama_model.lower())
         self.vit_model = None
         
-        # Set text model based on vision model choice
+        # Set text model based on vision model choice (env overrides device_config)
         if self.use_microvit or self.use_vit:
-            self.ollama_text_model = os.getenv('OLLAMA_TEXT_MODEL', 'phi3:mini')
+            self.ollama_text_model = os.getenv('OLLAMA_TEXT_MODEL') or _cfg['ollama_model']
             logger.info(f"📝 Vision model will use '{self.ollama_text_model}' for text generation")
         else:
             self.ollama_text_model = self.ollama_model
@@ -200,7 +226,9 @@ class Robot1AIServiceRealtime:
         self.setup_ollama()
         
         logger.info("🤖 Robot1 AI Service started in REALTIME MODE")
-        logger.info("📡 Nano at %s:%s (from config/device_config.yaml if present, else NANO_IP env)", self.nano_ip, self.nano_port)
+        logger.info("📡 Nano at %s:%s | MQTT broker %s:%s | Ollama %s model=%s",
+                    self.nano_ip, self.nano_port, self.mqtt_broker_host, self.mqtt_broker_port,
+                    self.ollama_host, self.ollama_model)
     
     def setup_xmlrpc(self):
         """Setup XML-RPC connection to Nano for REAL camera/LiDAR/odom. Uses 10s timeout so startup does not hang if Nano is down."""
@@ -244,9 +272,10 @@ class Robot1AIServiceRealtime:
         try:
             self.mqtt_client.connect(self.mqtt_broker_host, self.mqtt_broker_port, 60)
             self.mqtt_client.loop_start()
-            logger.info(f"Connected to MQTT broker at {self.mqtt_broker_host}:{self.mqtt_broker_port}")
+            logger.info(f"Connecting to MQTT broker at {self.mqtt_broker_host}:{self.mqtt_broker_port}...")
         except Exception as e:
-            logger.error(f"MQTT connection failed: {e}")
+            self._mqtt_connected = False
+            logger.error(f"MQTT connection failed: {e}. AI messages will NOT be published. Fix: ensure Controller mosquitto is running, MQTT_BROKER_HOST=10.13.68.48.")
     
     def setup_ollama(self):
         """Setup Ollama AI service"""
@@ -261,48 +290,30 @@ class Robot1AIServiceRealtime:
     
     def on_mqtt_connect(self, client, userdata, flags, rc):
         if rc == 0:
+            self._mqtt_connected = True
             logger.info("MQTT Connected successfully")
             client.subscribe(f"robots/{self.robot_id}/command")
         else:
+            self._mqtt_connected = False
             logger.error(f"MQTT Connection failed with code {rc}")
     
-    def capture_camera_image(self) -> str:
-        """Capture REAL image from Nano camera via XML-RPC"""
+    def capture_camera_image(self) -> Optional[str]:
+        """Capture REAL image from Nano camera via XML-RPC. Returns None if no real image (no dummy/test image)."""
         try:
             if not self.nano_xmlrpc:
-                logger.warning("Using test image (no XML-RPC connection to Nano)")
-                return self.create_test_image()
+                logger.warning("No XML-RPC connection to Nano — skipping (REAL sensors only)")
+                return None
             response = self.nano_xmlrpc.get_camera_image()
             if response.get('success', False):
                 image_data = response.get('image_data', '')
                 if image_data:
                     logger.info(f"✅ Captured REAL image from Nano ({response.get('width')}x{response.get('height')})")
                     return image_data
-                else:
-                    logger.warning("Empty image data from Nano — check Nano camera init and permissions")
-            else:
-                logger.warning("Nano camera returned failure: %s", response.get('message', 'unknown'))
-            # Fallback to test image
-            logger.warning("Using test image (Nano camera unavailable). Fix: on Nano ensure camera init (chmod 666 /dev/video0, camera_device in launch), then restart Nano bringup.")
-            return self.create_test_image()
+            logger.debug("No real camera image: %s", response.get('message', 'unknown'))
+            return None
         except Exception as e:
-            logger.error("Image capture failed (Nano unreachable or RPC error): %s", e)
-            return self.create_test_image()
-    
-    def create_test_image(self) -> str:
-        """Create a test image for fallback"""
-        try:
-            img = Image.new('RGB', (640, 480), color='gray')
-            draw = ImageDraw.Draw(img)
-            draw.text((200, 200), "FALLBACK TEST IMAGE", fill='red')
-            draw.text((180, 250), f"Robot {self.robot_id} (REALTIME)", fill='white')
-            
-            buffer = io.BytesIO()
-            img.save(buffer, format='JPEG')
-            return base64.b64encode(buffer.getvalue()).decode('utf-8')
-        except Exception as e:
-            logger.error(f"Test image creation failed: {e}")
-            return ""
+            logger.error("Image capture failed: %s", e)
+            return None
     
     def get_real_lidar_data(self) -> Dict[str, Any]:
         """Get REAL LiDAR data from Nano via XML-RPC"""
@@ -635,26 +646,42 @@ Make it sound like a robot reporting to other robots. Mention my motion if relev
         return f"Robot {self.robot_id} at ({x:.1f}, {y:.1f}): {sensor_type} shows {distance}m to nearest obstacle."
     
     def detect_obstacle_and_generate_message(self):
-        """Main detection and AI message generation process using REAL data"""
+        """Main detection and AI message generation process. REAL SENSORS ONLY - skips when any sensor is dummy/fallback."""
         try:
-            # Get REAL odometry
+            # Get odometry — skip if not from real motor driver
             odom = self.get_real_odometry()
+            if odom.get('source') not in ('REAL', 'MIXED'):
+                logger.debug("Skipping cycle: odometry not real (source=%s). Need motor driver /odom.", odom.get('source'))
+                return
             x, y = odom['x'], odom['y']
             logger.info(f"Position ({odom['source']}): ({x:.2f}, {y:.2f})")
             
-            # Capture REAL image from Nano
+            # Capture REAL image — skip if no real camera
             image_data = self.capture_camera_image()
             if not image_data:
-                logger.error("Failed to capture image")
+                logger.debug("Skipping cycle: no real camera image (REAL sensors only)")
                 return
             
-            # Get REAL LiDAR data from Nano
+            # Get LiDAR data — skip if not from real RPLIDAR
             lidar_data = self.get_real_lidar_data()
+            if lidar_data.get('source') != 'REAL':
+                logger.debug("Skipping cycle: LiDAR not real (source=%s). Need RPLIDAR with use_lidar:=true.", lidar_data.get('source'))
+                return
             logger.info(f"LiDAR ({lidar_data.get('sensor_type')}): {lidar_data.get('nearest_distance')}m")
             
             # Generate AI message
             ai_message = self.generate_ai_message(image_data, x, y, lidar_data, odom=odom)
             
+            # Compute obstacle coordinates in world frame (for controller/helper delegation)
+            theta = float(odom.get('theta', 0.0))
+            dist = float(lidar_data.get('nearest_distance', 0.5))
+            dir_deg = float(lidar_data.get('obstacle_direction', 0.0))
+            dir_rad = math.radians(dir_deg)
+            global_angle = theta + dir_rad
+            obs_x = round(x + dist * math.cos(global_angle), 3)
+            obs_y = round(y + dist * math.sin(global_angle), 3)
+            obstacle_coordinates = {"x": obs_x, "y": obs_y}
+
             # Create obstacle event (schema aligned with controller expectations)
             confidence = float(lidar_data.get('confidence', 0.5))
             obstacle_event = {
@@ -663,6 +690,7 @@ Make it sound like a robot reporting to other robots. Mention my motion if relev
                 "context_id": str(uuid.uuid4()),
                 "time": datetime.now().isoformat(),
                 "location": {"x": x, "y": y},
+                "obstacle_coordinates": obstacle_coordinates,
                 "natural_message": ai_message,
                 "message_type": "ai_generated_with_vision",
                 "obstacle_type": "detection",
@@ -677,10 +705,11 @@ Make it sound like a robot reporting to other robots. Mention my motion if relev
             
             # Publish via MQTT
             topic = f"robots/{self.robot_id}/obstacle"
-            self.mqtt_client.publish(topic, json.dumps(obstacle_event), qos=1)
-            
-            # Also log the full message that was published
-            logger.info("Published REALTIME obstacle event (FULL):\n%s", ai_message.strip())
+            if not getattr(self, '_mqtt_connected', False):
+                logger.error("❌ MQTT not connected — AI message NOT published. Fix: ensure MQTT_BROKER_HOST=10.13.68.48 (Controller), mosquitto running on Controller.")
+            else:
+                self.mqtt_client.publish(topic, json.dumps(obstacle_event), qos=1)
+                logger.info("Published REALTIME obstacle event (FULL):\n%s", ai_message.strip())
             self.detection_count += 1
             
         except Exception as e:
@@ -689,7 +718,7 @@ Make it sound like a robot reporting to other robots. Mention my motion if relev
     def run_continuous_detection(self, interval: int = 5):
         """Run continuous obstacle detection with REAL data. One failed cycle never stops the loop."""
         logger.info("Starting continuous REALTIME detection every %s seconds. Press Ctrl+C to stop.", interval)
-        
+        time.sleep(2)  # Allow MQTT to connect before first cycle
         try:
             while True:
                 try:
